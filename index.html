@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoGuardian Global - Plataforma de Seguridad</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Leaflet Routing Machine -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+    <!-- Leaflet Control Geocoder -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+    <style>
+        /* Estilos base */
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            background-color: #111827;
+        }
+        #map {
+            height: 100vh;
+            width: 100vw;
+            background-color: #1f2937;
+        }
+        
+        /* Ocultar el control de rutas por defecto */
+        .leaflet-routing-container {
+            display: none !important;
+        }
+
+        /* Scrollbar personalizado */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1f2937; 
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #4b5563; 
+            border-radius: 3px;
+        }
+
+        /* Popups del Mapa */
+        .leaflet-popup-content-wrapper {
+            background: #1f2937;
+            color: #f3f4f6;
+            border: 1px solid #374151;
+        }
+        .leaflet-popup-tip {
+            background: #1f2937;
+        }
+        
+        .city-label-tooltip {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            color: #fff;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px #000;
+            font-size: 12px;
+        }
+
+        .legend {
+            padding: 8px;
+            background: rgba(31, 41, 55, 0.9);
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            color: #f3f4f6;
+            border: 1px solid #374151;
+            font-size: 12px;
+        }
+        .legend i {
+            width: 14px;
+            height: 14px;
+            float: left;
+            margin-right: 6px;
+            opacity: 0.9;
+            border-radius: 50%;
+        }
+
+        /* Animaciones */
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .animate-pulse-red {
+            animation: pulse-red 2s infinite;
+        }
+        
+        /* Dashboard Transition */
+        .dashboard-enter {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        .dashboard-enter-active {
+            opacity: 1;
+            transform: scale(1);
+            transition: opacity 300ms, transform 300ms;
+        }
+        .dashboard-exit {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .dashboard-exit-active {
+            opacity: 0;
+            transform: scale(0.95);
+            transition: opacity 300ms, transform 300ms;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    
+    <!-- Contenedor del Mapa -->
+    <div id="map" class="relative z-0"></div>
+
+    <!-- ENCABEZADO SUPERIOR -->
+    <div class="absolute top-4 left-0 right-0 z-[1100] pointer-events-none flex justify-center">
+        <div class="bg-gray-900/90 backdrop-blur-md text-white px-4 py-2 rounded-full shadow-lg border border-gray-700 pointer-events-auto flex items-center gap-4">
+            <h1 class="text-sm font-bold flex items-center gap-2 text-blue-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
+                GeoGuardian
+            </h1>
+            <div class="h-4 w-px bg-gray-600"></div>
+            <button id="toggle-dashboard-btn" class="text-xs font-semibold hover:text-blue-400 transition-colors flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                Plataforma
+            </button>
+        </div>
+    </div>
+
+    <!-- PANEL DE CONTROL DE RUTA (Flotante a la izquierda) -->
+    <div id="route-panel" class="absolute top-20 left-4 z-[1000] w-full max-w-[300px] bg-gray-800/95 backdrop-blur-md border border-gray-700 rounded-xl shadow-2xl flex flex-col transition-all duration-300 max-h-[80vh]">
+        <!-- Header del Panel -->
+        <div class="p-3 border-b border-gray-700 flex justify-between items-center">
+            <span class="text-xs font-bold text-gray-300">Navegación Táctica</span>
+            <div class="text-[10px] text-green-400 flex items-center gap-1">
+                <span class="block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Online
+            </div>
+        </div>
+
+        <!-- Formulario de Ruta -->
+        <div class="p-3 space-y-2">
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <div class="w-2 h-2 rounded-full bg-blue-500 ring-2 ring-blue-500/30"></div>
+                </div>
+                <input type="text" id="origin-input" placeholder="Origen" class="w-full pl-8 pr-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-xs text-white focus:ring-1 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-500" value="Guadalajara, Jalisco">
+            </div>
+
+            <div class="flex justify-center -my-2 relative z-10">
+                <button id="swap-btn" class="bg-gray-700 hover:bg-gray-600 text-gray-300 p-0.5 rounded-full border border-gray-600 transition-colors">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
+                </button>
+            </div>
+
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <div class="w-2 h-2 rounded-full bg-red-500 ring-2 ring-red-500/30"></div>
+                </div>
+                <input type="text" id="dest-input" placeholder="Destino" class="w-full pl-8 pr-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-xs text-white focus:ring-1 focus:ring-blue-500 focus:border-transparent outline-none transition-all">
+            </div>
+
+            <button id="calculate-route-btn" class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg transform transition-all active:scale-95 flex justify-center items-center gap-2 mt-2 text-xs">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Trazar Ruta
+            </button>
+        </div>
+
+        <!-- Instrucciones / Estado (Scrollable) -->
+        <div id="route-panel-content" class="flex-1 overflow-y-auto custom-scrollbar p-3 border-t border-gray-700 hidden">
+            <h3 class="text-[10px] font-bold text-gray-400 uppercase mb-2">Estado de Ruta</h3>
+            <div id="route-summary" class="bg-gray-700/50 rounded-lg p-2 text-xs mb-2 text-center">
+                Calculando...
+            </div>
+            <ul id="route-instructions" class="space-y-2 text-gray-300 text-[10px]">
+                <!-- Pasos insertados via JS -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- VISTA DE DASHBOARD / PLATAFORMA (Superpuesta) -->
+    <div id="dashboard-view" class="hidden absolute inset-0 z-[1200] bg-gray-900 text-white overflow-hidden flex flex-col">
+        <!-- Dashboard Header -->
+        <div class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-md">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-2 rounded-lg">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold tracking-wide">PLATAFORMA CENTRAL</h2>
+                    <p class="text-xs text-gray-400 uppercase tracking-widest">GeoGuardian Sistema de Monitoreo v3.2</p>
+                </div>
+            </div>
+            <button id="close-dashboard-btn" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
+                Volver al Mapa
+            </button>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div class="flex-1 overflow-y-auto p-6 bg-gray-900/50 backdrop-blur-sm custom-scrollbar">
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <!-- Card 1 -->
+                <div class="bg-gray-800 rounded-xl p-5 border border-gray-700 shadow-lg relative overflow-hidden group hover:border-blue-500 transition-colors">
+                    <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <svg class="w-16 h-16 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"></path></svg>
+                    </div>
+                    <p class="text-gray-400 text-xs uppercase font-semibold">Patrullas Activas</p>
+                    <h3 class="text-3xl font-bold text-white mt-1" id="dash-patrols">0</h3>
+                    <div class="mt-4 flex items-center text-xs text-green-400">
+                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                        +12% vs ayer
+                    </div>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="bg-gray-800 rounded-xl p-5 border border-gray-700 shadow-lg relative overflow-hidden group hover:border-red-500 transition-colors">
+                    <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <svg class="w-16 h-16 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                    </div>
+                    <p class="text-gray-400 text-xs uppercase font-semibold">Alertas Críticas</p>
+                    <h3 class="text-3xl font-bold text-white mt-1" id="dash-alerts">3</h3>
+                    <div class="mt-4 flex items-center text-xs text-red-400">
+                        <span class="animate-pulse mr-1">●</span> Requieren atención
+                    </div>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="bg-gray-800 rounded-xl p-5 border border-gray-700 shadow-lg relative overflow-hidden group hover:border-green-500 transition-colors">
+                    <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <svg class="w-16 h-16 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                    </div>
+                    <p class="text-gray-400 text-xs uppercase font-semibold">Zonas Seguras</p>
+                    <h3 class="text-3xl font-bold text-white mt-1" id="dash-safe">1,240</h3>
+                    <div class="mt-4 flex items-center text-xs text-gray-400">
+                        Cobertura 92%
+                    </div>
+                </div>
+
+                <!-- Card 4 -->
+                <div class="bg-gray-800 rounded-xl p-5 border border-gray-700 shadow-lg relative overflow-hidden group hover:border-yellow-500 transition-colors">
+                    <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <svg class="w-16 h-16 text-yellow-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                    </div>
+                    <p class="text-gray-400 text-xs uppercase font-semibold">Reportes Ciudadanos</p>
+                    <h3 class="text-3xl font-bold text-white mt-1">24</h3>
+                    <div class="mt-4 flex items-center text-xs text-yellow-400">
+                        Última hora
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Split -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- Columna Izquierda: Actividad Reciente -->
+                <div class="bg-gray-800 rounded-xl border border-gray-700 shadow-lg lg:col-span-2">
+                    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                        <h3 class="font-bold text-sm text-white">Feed de Actividad Global</h3>
+                        <button class="text-xs text-blue-400 hover:text-blue-300">Ver todo</button>
+                    </div>
+                    <div class="p-0">
+                        <ul class="divide-y divide-gray-700" id="activity-feed">
+                            <!-- Items dinámicos -->
+                            <li class="p-4 hover:bg-gray-700/50 transition-colors flex items-start gap-3">
+                                <div class="w-2 h-2 rounded-full bg-red-500 mt-2"></div>
+                                <div>
+                                    <p class="text-sm font-semibold text-white">Incidente reportado en Zona Centro</p>
+                                    <p class="text-xs text-gray-400">Guadalajara, Jalisco • Hace 2 min</p>
+                                </div>
+                            </li>
+                            <li class="p-4 hover:bg-gray-700/50 transition-colors flex items-start gap-3">
+                                <div class="w-2 h-2 rounded-full bg-green-500 mt-2"></div>
+                                <div>
+                                    <p class="text-sm font-semibold text-white">Patrullaje completado - Sector Norte</p>
+                                    <p class="text-xs text-gray-400">Zapopan, Jalisco • Hace 5 min</p>
+                                </div>
+                            </li>
+                            <li class="p-4 hover:bg-gray-700/50 transition-colors flex items-start gap-3">
+                                <div class="w-2 h-2 rounded-full bg-blue-500 mt-2"></div>
+                                <div>
+                                    <p class="text-sm font-semibold text-white">Nueva ruta segura generada</p>
+                                    <p class="text-xs text-gray-400">Usuario #4921 • Hace 12 min</p>
+                                </div>
+                            </li>
+                            <li class="p-4 hover:bg-gray-700/50 transition-colors flex items-start gap-3">
+                                <div class="w-2 h-2 rounded-full bg-yellow-500 mt-2"></div>
+                                <div>
+                                    <p class="text-sm font-semibold text-white">Reporte de tráfico denso</p>
+                                    <p class="text-xs text-gray-400">López Mateos Sur • Hace 18 min</p>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Columna Derecha: Estado del Sistema -->
+                <div class="space-y-6">
+                    <!-- Status Bars -->
+                    <div class="bg-gray-800 rounded-xl border border-gray-700 shadow-lg p-5">
+                        <h3 class="font-bold text-sm text-white mb-4">Estado de la Red</h3>
+                        
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-gray-400">Conexión Satelital</span>
+                                <span class="text-green-400">Estable (98%)</span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-1.5">
+                                <div class="bg-green-500 h-1.5 rounded-full" style="width: 98%"></div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-gray-400">Carga de Servidor</span>
+                                <span class="text-blue-400">Normal (34%)</span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-1.5">
+                                <div class="bg-blue-500 h-1.5 rounded-full" style="width: 34%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-gray-400">Nivel de Amenaza Global</span>
+                                <span class="text-yellow-400">Moderado</span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-1.5">
+                                <div class="bg-yellow-500 h-1.5 rounded-full" style="width: 45%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mini Map Placeholder or Extra Info -->
+                    <div class="bg-gradient-to-br from-blue-900 to-gray-800 rounded-xl border border-blue-800 shadow-lg p-5 text-center">
+                        <svg class="w-12 h-12 text-blue-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                        <h4 class="font-bold text-white">Modo Táctico</h4>
+                        <p class="text-xs text-blue-200 mt-1">Activa la visualización de calor para análisis de densidad criminal.</p>
+                        <button class="mt-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2 px-4 rounded-lg w-full">Activar Capa de Calor</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botón de Reporte Flotante -->
+    <div class="absolute bottom-8 right-6 z-[1000] group">
+        <div class="absolute -top-1 -right-1 z-10 flex h-4 w-4">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-gray-900"></span>
+        </div>
+        
+        <button id="open-report-modal" class="relative bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-2xl transition-all transform hover:scale-110 flex items-center justify-center border-4 border-gray-800 animate-pulse-red group-hover:animate-none">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+            </svg>
+        </button>
+        <div class="absolute bottom-full right-0 mb-3 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none font-bold">
+            Reportar en Vivo
+        </div>
+    </div>
+
+    <!-- MODAL DE REPORTE -->
+    <div id="report-modal" class="hidden fixed inset-0 bg-black/80 z-[2000] flex justify-center items-center p-4 backdrop-blur-sm transition-opacity duration-300">
+        <div class="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300" id="report-modal-content">
+            <div class="bg-gray-700 p-4 border-b border-gray-600 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-red-500 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    Reporte en Tiempo Real
+                </h3>
+                <button id="close-report-modal" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-3 gap-3">
+                    <label class="cursor-pointer">
+                        <input type="radio" name="risk-level" value="segura" class="peer sr-only">
+                        <div class="p-3 rounded-lg border border-gray-600 bg-gray-700/50 hover:bg-gray-700 peer-checked:border-green-500 peer-checked:bg-green-900/30 text-center transition-all">
+                            <span class="text-xs font-bold text-gray-300 block">Seguro</span>
+                        </div>
+                    </label>
+                    <label class="cursor-pointer">
+                        <input type="radio" name="risk-level" value="regular" class="peer sr-only">
+                        <div class="p-3 rounded-lg border border-gray-600 bg-gray-700/50 hover:bg-gray-700 peer-checked:border-orange-500 peer-checked:bg-orange-900/30 text-center transition-all">
+                            <span class="text-xs font-bold text-gray-300 block">Precaución</span>
+                        </div>
+                    </label>
+                    <label class="cursor-pointer">
+                        <input type="radio" name="risk-level" value="insegura" class="peer sr-only" checked>
+                        <div class="p-3 rounded-lg border border-gray-600 bg-gray-700/50 hover:bg-gray-700 peer-checked:border-red-500 peer-checked:bg-red-900/30 text-center transition-all">
+                            <span class="text-xs font-bold text-gray-300 block">Peligro</span>
+                        </div>
+                    </label>
+                </div>
+                <div>
+                    <textarea id="report-comment" rows="3" class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="Describe lo que está sucediendo ahora..."></textarea>
+                </div>
+                <button id="submit-report" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                    Transmitir Reporte
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Alerta -->
+    <div id="alert-modal" class="hidden fixed inset-0 bg-black/80 z-[2100] flex justify-center items-center p-4 backdrop-blur-sm">
+        <div class="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-6 w-full max-w-sm text-center">
+            <div id="alert-icon-container" class="mx-auto flex items-center justify-center h-16 w-16 rounded-full mb-4"></div>
+            <h3 id="alert-title" class="text-xl font-bold text-white mb-2"></h3>
+            <p id="alert-message" class="text-gray-300 mb-6 text-sm"></p>
+            <button id="close-alert-button" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                Cerrar
+            </button>
+        </div>
+    </div>
+
+<script>
+    // --- CONFIGURACIÓN ---
+    const mapConfig = {
+        center: [20.0, 0.0], // Vista Mundial
+        zoom: 3, 
+        minZoomCircles: 12, 
+        maxZoomPolice: 14
+    };
+
+    const ZONE_COLORS = {
+        'insegura': { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.35 },
+        'regular': { color: '#f97316', fillColor: '#f97316', fillOpacity: 0.25 },
+        'segura': { color: '#10b981', fillColor: '#10b981', fillOpacity: 0.15 }
+    };
+
+    // --- BASE DE DATOS GLOBAL MASIVA ---
+    const globalLocations = [
+        // AMÉRICA DEL NORTE
+        { lat: 19.4326, lon: -99.1332, name: "Ciudad de México, MX" },
+        { lat: 20.6597, lon: -103.3496, name: "Guadalajara, MX" },
+        { lat: 25.6866, lon: -100.3161, name: "Monterrey, MX" },
+        { lat: 32.5149, lon: -117.0382, name: "Tijuana, MX" },
+        { lat: 21.1619, lon: -86.8515, name: "Cancún, MX" },
+        { lat: 40.7128, lon: -74.0060, name: "Nueva York, USA" },
+        { lat: 34.0522, lon: -118.2437, name: "Los Ángeles, USA" },
+        { lat: 41.8781, lon: -87.6298, name: "Chicago, USA" },
+        { lat: 43.6532, lon: -79.3832, name: "Toronto, CA" },
+        { lat: 49.2827, lon: -123.1207, name: "Vancouver, CA" },
+
+        // AMÉRICA DEL SUR Y CENTRAL
+        { lat: 9.9281, lon: -84.0907, name: "San José, CR" },
+        { lat: 8.9824, lon: -79.5199, name: "Panamá, PA" },
+        { lat: 4.7110, lon: -74.0721, name: "Bogotá, CO" },
+        { lat: 6.2442, lon: -75.5812, name: "Medellín, CO" },
+        { lat: -0.1807, lon: -78.4678, name: "Quito, EC" },
+        { lat: -12.0464, lon: -77.0428, name: "Lima, PE" },
+        { lat: -33.4489, lon: -70.6693, name: "Santiago, CL" },
+        { lat: -34.6037, lon: -58.3816, name: "Buenos Aires, AR" },
+        { lat: -23.5505, lon: -46.6333, name: "São Paulo, BR" },
+        { lat: -22.9068, lon: -43.1729, name: "Río de Janeiro, BR" },
+        
+        // EUROPA
+        { lat: 40.4168, lon: -3.7038, name: "Madrid, ES" },
+        { lat: 41.3851, lon: 2.1734, name: "Barcelona, ES" },
+        { lat: 48.8566, lon: 2.3522, name: "París, FR" },
+        { lat: 51.5074, lon: -0.1278, name: "Londres, UK" },
+        { lat: 52.5200, lon: 13.4050, name: "Berlín, DE" },
+        { lat: 41.9028, lon: 12.4964, name: "Roma, IT" },
+        { lat: 55.7558, lon: 37.6173, name: "Moscú, RU" },
+        { lat: 52.3676, lon: 4.9041, name: "Ámsterdam, NL" },
+        { lat: 59.3293, lon: 18.0686, name: "Estocolmo, SE" },
+        
+        // ASIA
+        { lat: 35.6762, lon: 139.6503, name: "Tokio, JP" },
+        { lat: 37.5665, lon: 126.9780, name: "Seúl, KR" },
+        { lat: 39.9042, lon: 116.4074, name: "Pekín, CN" },
+        { lat: 31.2304, lon: 121.4737, name: "Shanghái, CN" },
+        { lat: 28.6139, lon: 77.2090, name: "Nueva Delhi, IN" },
+        { lat: 19.0760, lon: 72.8777, name: "Bombay, IN" },
+        { lat: 13.7563, lon: 100.5018, name: "Bangkok, TH" },
+        { lat: 1.3521, lon: 103.8198, name: "Singapur, SG" },
+        { lat: 25.2048, lon: 55.2708, name: "Dubái, AE" },
+        
+        // ÁFRICA
+        { lat: 30.0444, lon: 31.2357, name: "El Cairo, EG" },
+        { lat: 6.5244, lon: 3.3792, name: "Lagos, NG" },
+        { lat: -33.9249, lon: 18.4241, name: "Ciudad del Cabo, ZA" },
+        { lat: -1.2921, lon: 36.8219, name: "Nairobi, KE" },
+        
+        // OCEANÍA
+        { lat: -33.8688, lon: 151.2093, name: "Sídney, AU" },
+        { lat: -37.8136, lon: 144.9631, name: "Melbourne, AU" },
+        { lat: -36.8485, lon: 174.7633, name: "Auckland, NZ" }
+    ];
+
+    let safetyZones = [];
+    let policeLocations = [];
+
+    // --- GENERADOR DE PUNTOS ---
+    function generateRandomPoints(centerLat, centerLon, count, spread, riskFactor = 0) {
+        for (let i = 0; i < count; i++) {
+            const lat = centerLat + (Math.random() - 0.5) * spread;
+            const lon = centerLon + (Math.random() - 0.5) * spread;
+            
+            const rand = Math.random();
+            let type = 'segura';
+            let radius = 300 + Math.random() * 500;
+            let name = "Zona Segura";
+            
+            if (rand < (0.2 + riskFactor)) {
+                type = 'insegura';
+                radius = 200 + Math.random() * 400;
+                name = "Zona de Alto Riesgo";
+            } else if (rand < (0.5 + (riskFactor/2))) {
+                type = 'regular';
+                name = "Precaución";
+            }
+
+            const suffix = Math.floor(Math.random() * 5000);
+            name += ` #${suffix}`;
+
+            safetyZones.push({ lat, lon, radius, level: type, name: name, comment: "Zona monitoreada." });
+
+            if (type === 'insegura' && Math.random() > 0.7) {
+                policeLocations.push({ lat: lat + 0.002, lon: lon + 0.002 });
+            }
+        }
+    }
+
+    // 1. Generar puntos para CADA ciudad global
+    globalLocations.forEach(city => {
+        const density = 30 + Math.floor(Math.random() * 20); 
+        const risk = Math.random() * 0.3; 
+        generateRandomPoints(city.lat, city.lon, density, 0.15, risk);
+    });
+
+    // 2. Refuerzo en Guadalajara
+    generateRandomPoints(20.6597, -103.3496, 100, 0.1, 0.4);
+
+    // --- VARIABLES GLOBALES ---
+    let map = null;
+    let zoneLayers = [];
+    let policeMarkers = [];
+    let cityLabelLayers = []; 
+    let routingControl = null;
+    const geocoder = L.Control.Geocoder.nominatim();
+
+    const policeIcon = L.icon({
+        iconUrl: 'https://api.iconify.design/maki/police.svg?color=%2360a5fa',
+        iconSize: [28, 28],
+        className: 'police-marker'
+    });
+
+    // --- INICIALIZACIÓN ---
+    function initializeMap() {
+        map = L.map('map').setView([20, 0], 3);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(map);
+
+        displaySafetyZones();
+        displayCityLabels(); 
+        updateDashboardStats(); // Actualizar stats iniciales
+
+        // Routing Machine
+        routingControl = L.Routing.control({
+            waypoints: [],
+            routeWhileDragging: false,
+            show: false,
+            createMarker: function() { return null; },
+            lineOptions: {
+                styles: [{color: '#3b82f6', opacity: 0.8, weight: 5}]
+            },
+            router: L.Routing.osrmv1({
+                serviceUrl: 'https://router.project-osrm.org/route/v1'
+            })
+        }).addTo(map);
+
+        routingControl.on('routesfound', function(e) {
+            const routes = e.routes;
+            const summary = routes[0].summary;
+            
+            document.getElementById('route-panel-content').classList.remove('hidden');
+            document.getElementById('route-summary').innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-white">${Math.round(summary.totalDistance / 1000)} km</span>
+                    <span class="text-blue-300">${Math.round(summary.totalTime / 60)} min</span>
+                </div>
+            `;
+            
+            analyzeRouteSafety(routes[0]);
+            const bounds = L.latLngBounds(routes[0].coordinates);
+            map.fitBounds(bounds, {padding: [50, 50]});
+        });
+
+        map.on('zoomend', handleZoomLevel);
+        handleZoomLevel();
+        
+        const legend = L.control({position: 'bottomright'});
+        legend.onAdd = function (map) {
+            const div = L.DomUtil.create('div', 'info legend');
+            const items = {
+                'Alto Riesgo': '#ef4444',
+                'Precaución': '#f97316',
+                'Seguro': '#10b981',
+                'Ciudad': '#ffffff'
+            };
+            let labels = ['<strong>Zonas</strong>'];
+            for (let key in items) { labels.push('<i style="background:' + items[key] + '"></i> ' + key); }
+            div.innerHTML = labels.join('<br>');
+            return div;
+        };
+        legend.addTo(map);
+    }
+
+    function displayCityLabels() {
+        globalLocations.forEach(city => {
+            const marker = L.circleMarker([city.lat, city.lon], {
+                radius: 4,
+                fillColor: "#ffffff",
+                color: "#000",
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 1
+            });
+            
+            marker.bindTooltip(city.name, {
+                permanent: true,
+                direction: 'top',
+                className: 'city-label-tooltip',
+                offset: [0, -5]
+            });
+            
+            marker.addTo(map);
+            cityLabelLayers.push(marker);
+        });
+    }
+
+    function displaySafetyZones() {
+        safetyZones.forEach(zone => {
+            const style = ZONE_COLORS[zone.level];
+            const circle = L.circle([zone.lat, zone.lon], {
+                color: style.color,
+                fillColor: style.fillColor,
+                fillOpacity: style.fillOpacity,
+                weight: 1,
+                radius: zone.radius
+            }).bindPopup(`<b>${zone.name}</b><br>${zone.comment}`);
+            
+            zoneLayers.push({ circle: circle, lat: zone.lat, lon: zone.lon, active: false });
+        });
+        
+        updateVisibleZones(); 
+        map.on('moveend', updateVisibleZones);
+    }
+
+    function updateVisibleZones() {
+        if (!map) return;
+        const bounds = map.getBounds();
+        const zoom = map.getZoom();
+
+        cityLabelLayers.forEach(layer => {
+            if (zoom < 4) { 
+                if (map.hasLayer(layer)) map.removeLayer(layer);
+            } else {
+                if (!map.hasLayer(layer)) map.addLayer(layer);
+            }
+        });
+
+        if (zoom < 10) {
+            zoneLayers.forEach(z => {
+                if (z.active) { map.removeLayer(z.circle); z.active = false; }
+            });
+            return;
+        }
+
+        zoneLayers.forEach(z => {
+            if (bounds.contains([z.lat, z.lon])) {
+                if (!z.active) { map.addLayer(z.circle); z.active = true; }
+            } else {
+                if (z.active) { map.removeLayer(z.circle); z.active = false; }
+            }
+        });
+    }
+
+    // --- DASHBOARD LOGIC ---
+    function updateDashboardStats() {
+        document.getElementById('dash-patrols').innerText = policeLocations.length || "142";
+        // Mock data for alerts as we don't have a real time system yet for that variable
+        const safeCount = safetyZones.filter(z => z.level === 'segura').length;
+        document.getElementById('dash-safe').innerText = safeCount;
+    }
+
+    const dashboard = document.getElementById('dashboard-view');
+    const toggleBtn = document.getElementById('toggle-dashboard-btn');
+    const closeDashBtn = document.getElementById('close-dashboard-btn');
+
+    function toggleDashboard(show) {
+        if (show) {
+            dashboard.classList.remove('hidden');
+        } else {
+            dashboard.classList.add('hidden');
+        }
+    }
+
+    toggleBtn.addEventListener('click', () => toggleDashboard(true));
+    closeDashBtn.addEventListener('click', () => toggleDashboard(false));
+
+    // --- LÓGICA DE INTERFAZ DE RUTAS ---
+    document.getElementById('calculate-route-btn').addEventListener('click', async () => {
+        const originText = document.getElementById('origin-input').value;
+        const destText = document.getElementById('dest-input').value;
+
+        if (!originText || !destText) {
+            showAlert("Datos Incompletos", "Por favor ingresa origen y destino.", "warning");
+            return;
+        }
+
+        const btn = document.getElementById('calculate-route-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = `Buscando...`;
+
+        try {
+            const originCoords = await geocodeAddress(originText);
+            const destCoords = await geocodeAddress(destText);
+
+            if (originCoords && destCoords) {
+                routingControl.setWaypoints([
+                    L.latLng(originCoords.lat, originCoords.lon),
+                    L.latLng(destCoords.lat, destCoords.lon)
+                ]);
+                btn.innerHTML = 'Ruta Trazada';
+                setTimeout(() => btn.innerHTML = originalText, 2000);
+            } else {
+                showAlert("Error", "No pudimos encontrar una de las ubicaciones.", "error");
+                btn.innerHTML = originalText;
+            }
+        } catch (e) {
+            console.error(e);
+            btn.innerHTML = 'Error';
+        }
+    });
+
+    function geocodeAddress(query) {
+        return new Promise((resolve, reject) => {
+            geocoder.geocode(query, (results) => {
+                if (results && results.length > 0) {
+                    resolve({ lat: results[0].center.lat, lon: results[0].center.lng });
+                } else {
+                    resolve(null);
+                }
+            });
+        });
+    }
+
+    document.getElementById('swap-btn').addEventListener('click', () => {
+        const o = document.getElementById('origin-input');
+        const d = document.getElementById('dest-input');
+        const temp = o.value;
+        o.value = d.value;
+        d.value = temp;
+    });
+
+    function analyzeRouteSafety(route) {
+        let riskCount = 0;
+        const coordinates = route.coordinates; 
+
+        for (let i = 0; i < coordinates.length; i += 20) {
+            const point = coordinates[i];
+            for (let z of safetyZones) {
+                if (z.level === 'insegura') {
+                    if (Math.abs(z.lat - point.lat) < 0.005 && Math.abs(z.lon - point.lng) < 0.005) {
+                        riskCount++;
+                        break; 
+                    }
+                }
+            }
+            if (riskCount > 0) break;
+        }
+
+        if (riskCount > 0) {
+            showAlert("¡Alerta de Ruta!", "Esta ruta pasa cerca de zonas reportadas como inseguras.", "warning");
+        }
+    }
+
+    function handleZoomLevel() {
+        const currentZoom = map.getZoom();
+        const showPolice = currentZoom >= 14; 
+        
+        policeMarkers.forEach(m => map.removeLayer(m));
+        policeMarkers = [];
+
+        if (showPolice) {
+            policeLocations.forEach(loc => {
+                if (map.getBounds().contains([loc.lat, loc.lon])) {
+                    const m = L.marker([loc.lat, loc.lon], {icon: policeIcon})
+                        .addTo(map)
+                        .bindPopup("Patrulla");
+                    policeMarkers.push(m);
+                }
+            });
+        }
+    }
+
+    const alertModal = document.getElementById('alert-modal');
+    const alertTitle = document.getElementById('alert-title');
+    const alertMessage = document.getElementById('alert-message');
+    const alertIcon = document.getElementById('alert-icon-container');
+
+    const icons = {
+        warning: `<svg class="h-8 w-8 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`,
+        error: `<svg class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2 2m2-2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
+    };
+    
+    function showAlert(title, message, type) {
+        alertTitle.textContent = title;
+        alertMessage.textContent = message;
+        alertIcon.innerHTML = icons[type] || icons.warning;
+        alertIcon.className = `mx-auto flex items-center justify-center h-16 w-16 rounded-full mb-4 ${type === 'error' ? 'bg-red-900/50' : 'bg-yellow-900/50'}`;
+        alertModal.classList.remove('hidden');
+    }
+
+    document.getElementById('close-alert-button').addEventListener('click', () => {
+        alertModal.classList.add('hidden');
+    });
+
+    const reportModal = document.getElementById('report-modal');
+    document.getElementById('open-report-modal').addEventListener('click', () => reportModal.classList.remove('hidden'));
+    document.getElementById('close-report-modal').addEventListener('click', () => reportModal.classList.add('hidden'));
+    document.getElementById('submit-report').addEventListener('click', () => {
+        reportModal.classList.add('hidden');
+        showAlert("Recibido", "Reporte en tiempo real agregado.", "warning");
+        
+        // Agregar al feed del dashboard
+        const feed = document.getElementById('activity-feed');
+        const item = document.createElement('li');
+        item.className = "p-4 hover:bg-gray-700/50 transition-colors flex items-start gap-3";
+        item.innerHTML = `
+            <div class="w-2 h-2 rounded-full bg-yellow-500 mt-2"></div>
+            <div>
+                <p class="text-sm font-semibold text-white">Nuevo reporte ciudadano</p>
+                <p class="text-xs text-gray-400">Hace un momento</p>
+            </div>
+        `;
+        feed.insertBefore(item, feed.firstChild);
+    });
+
+    window.onload = initializeMap;
+
+</script>
+</body>
+</html>
